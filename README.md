@@ -1,6 +1,8 @@
 # Loan Checker
 
-Public comparison of fictional Polish payday loans (chwilówki) and installment loans (pożyczki ratalne), in PLN. No accounts, no applications, no admin UI. This change is the catalog, the pricing, and the ranking API. `src/app/page.tsx` is still the Next.js starter so the UI can be added without a rewrite.
+Public comparison of fictional Polish payday loans (chwilówki) and installment loans (pożyczki ratalne), in PLN. No accounts, no applications, no admin UI.
+
+The page is the comparison UI. The first response is server-rendered from `loadRanking()`. Changing the amount or the period updates the ranking through `GET /api/ranking` without a full reload. The form has one period for the whole list, default 30 days, and every request sends that `period` with `periodUnit=days`. Cards stay in the order returned. „Przejdź do oferty” opens `affiliateUrl` in a new tab.
 
 Affiliate links are stored for „Przejdź do oferty” and do not change rank.
 
