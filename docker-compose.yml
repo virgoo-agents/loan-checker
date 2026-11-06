@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: loan_checker
+      POSTGRES_PASSWORD: loan_checker
+      POSTGRES_DB: loan_checker
+    ports:
+      - "5432:5432"
+    volumes:
+      - loan_checker_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loan_checker -d loan_checker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  loan_checker_pg:

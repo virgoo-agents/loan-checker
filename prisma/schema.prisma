@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProductType {
+  PAYDAY
+  INSTALLMENT
+}
+
+enum RateType {
+  FIXED
+  VARIABLE
+}
+
+/// Manual offer catalog. Affiliate URL is stored for the outbound link and is not a ranking input.
+model Offer {
+  id              String      @id
+  partnerName     String      @map("partner_name")
+  logoUrl         String?     @map("logo_url")
+  productType     ProductType @map("product_type")
+  minAmountPln    Int         @map("min_amount_pln")
+  maxAmountPln    Int         @map("max_amount_pln")
+  minPeriod       Int         @map("min_period")
+  maxPeriod       Int         @map("max_period")
+  /// Nominal annual interest in basis points. 1850 = 18.50%.
+  interestRateBps Int         @map("interest_rate_bps")
+  rateType        RateType    @map("rate_type")
+  /// One-time commission in basis points of the requested amount. 1000 = 10%.
+  commissionBps   Int         @map("commission_bps")
+  /// One-time fee in grosze (1/100 PLN), added to the commission.
+  fixedFeeGrosze  Int         @map("fixed_fee_grosze")
+  affiliateUrl    String?     @map("affiliate_url")
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  @@map("offers")
+}
