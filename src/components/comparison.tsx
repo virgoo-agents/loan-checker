@@ -82,7 +82,7 @@ export function Comparison({
             Porównaj chwilówki i pożyczki
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-ink/70 md:text-lg">
-            Podaj kwotę i opcjonalnie okres spłaty. Ranking odświeża się od razu.
+            Podaj kwotę i wybierz okres spłaty: 30 albo 60 dni. Ranking odświeża się od razu.
             Bez rejestracji, bez logowania.
           </p>
         </div>
@@ -124,7 +124,7 @@ export function Comparison({
 
             <label className="block min-w-0 flex-1">
               <span className="mb-1.5 block px-1 text-sm font-medium text-ink/80">
-                Okres spłaty · opcjonalnie
+                Okres spłaty
               </span>
               <select
                 value={String(periodDays)}

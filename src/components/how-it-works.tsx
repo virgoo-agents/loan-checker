@@ -1,7 +1,7 @@
 const steps = [
   {
     title: "Podaj kwotę",
-    body: "Wpisz kwotę w złotych i opcjonalnie okres spłaty.",
+    body: "Wpisz kwotę w złotych i wybierz okres spłaty: 30 albo 60 dni.",
   },
   {
     title: "Widzisz ranking",
