@@ -6,17 +6,22 @@ import { formatAmountInput, formatPlnString, formatUpdatedAt } from "@/lib/money
 import {
   buildRankingQuery,
   PERIOD_DAY_OPTIONS,
+  type PeriodDays,
 } from "@/lib/ranking-request";
 import type { RankingResult } from "@/lib/ranking";
 
 interface ComparisonProps {
   initialResult: RankingResult;
   defaultAmount: string;
-  defaultPeriodDays: number;
+  defaultPeriodDays: PeriodDays;
 }
 
 const fieldClassName =
   "h-14 w-full rounded-xl border bg-cream px-4 text-base text-ink outline-none transition focus:border-pine";
+
+function isPeriodDays(value: number): value is PeriodDays {
+  return PERIOD_DAY_OPTIONS.some((days) => days === value);
+}
 
 const unavailable: RankingResult = {
   ok: false,
@@ -33,11 +38,11 @@ export function Comparison({
   defaultPeriodDays,
 }: ComparisonProps) {
   const [amountInput, setAmountInput] = useState(formatAmountInput(defaultAmount));
-  const [periodDays, setPeriodDays] = useState(defaultPeriodDays);
+  const [periodDays, setPeriodDays] = useState<PeriodDays>(defaultPeriodDays);
   const [result, setResult] = useState(initialResult);
   const [pending, setPending] = useState(false);
 
-  async function loadRanking(amount: string, period: number) {
+  async function loadRanking(amount: string, period: PeriodDays) {
     setPending(true);
     try {
       const params = buildRankingQuery(amount, period);
@@ -61,6 +66,7 @@ export function Comparison({
 
   function onPeriodChange(value: string) {
     const nextPeriod = Number(value);
+    if (!isPeriodDays(nextPeriod)) return;
     setPeriodDays(nextPeriod);
     void loadRanking(amountInput, nextPeriod);
   }

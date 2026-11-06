@@ -2,7 +2,7 @@
 
 Public comparison of fictional Polish payday loans (chwilówki) and installment loans (pożyczki ratalne), in PLN. No accounts, no applications, no admin UI.
 
-The page is the comparison UI. The first response is server-rendered from `loadRanking()`. Changing the amount or the period updates the ranking through `GET /api/ranking` without a full reload. The form has one period for the whole list, default 30 days, and every request sends that `period` with `periodUnit=days`. Cards stay in the order returned. „Przejdź do oferty” opens `affiliateUrl` in a new tab.
+The page is the comparison UI. The first response is server-rendered from `loadRanking()`. Changing the amount or the period updates the ranking through `GET /api/ranking` without a full reload. The form offers exactly two periods, 30 days and 60 days, and defaults to 30. Every request sends that one `period` with `periodUnit=days` for the whole ranking. Cards stay in the order returned. „Przejdź do oferty” opens `affiliateUrl` in a new tab.
 
 Affiliate links are stored for „Przejdź do oferty” and do not change rank.
 
