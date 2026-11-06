@@ -56,6 +56,7 @@ describe("seeded catalog", () => {
     expect(result.offers.map((offer) => [offer.id, offer.rrsoPercent, offer.totalCostPln, offer.affiliateUrl])).toEqual([
       ["para", "10.00", "100.00", null],
       ["para-plus", "10.00", "100.01", "https://example.com/partner/para-plus"],
+      ["mira", "11.50", "115.00", "https://example.com/partner/mira"],
     ]);
   });
 
@@ -64,7 +65,9 @@ describe("seeded catalog", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.offers.map((offer) => offer.id)).not.toContain("cichy");
-    expect(result.offers.length).toBeGreaterThan(0);
+    const mira = result.offers.find((offer) => offer.id === "mira");
+    expect(mira).toMatchObject({ period: 30, periodUnit: "days", productType: "installment" });
+    expect(result.offers.every((offer) => offer.period === 30 && offer.periodUnit === "days")).toBe(true);
   });
 
   it("returns an empty list for an amount outside every range", () => {
@@ -76,11 +79,11 @@ describe("seeded catalog", () => {
     }
   });
 
-  it("keeps only the large installment offers for 25000 over the default month term", () => {
-    const result = buildRanking(new URLSearchParams({ amount: "25000", periodUnit: "months" }), rows);
+  it("prices large installment offers for 30 days when period is omitted", () => {
+    const result = buildRanking(new URLSearchParams({ amount: "25000" }), rows);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.offers.map((offer) => offer.id).sort()).toEqual(["gora", "vega"]);
-    expect(result.offers.every((offer) => offer.installmentPln !== null)).toBe(true);
+    expect(result.offers.every((offer) => offer.period === 30 && offer.periodUnit === "days" && offer.installmentPln !== null)).toBe(true);
   });
 });

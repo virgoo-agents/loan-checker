@@ -30,10 +30,10 @@ Response types are `RankingResult` in `@/lib/ranking`.
 - Any other invalid amount → **400** `AMOUNT_INVALID`. No offer list is returned.
 - Invalid period → **400** `PERIOD_INVALID`. The default period is not substituted.
 - Invalid unit → **400** `PERIOD_UNIT_INVALID`.
-- Amount only: active chwilówki that allow **30 days**, priced at 30 days, and active pożyczki ratalne that allow **12 months**, priced at 12 months. One list.
-- `period` without `periodUnit` means **days**. A ratalna offer is not priced as if that number were months.
-- `periodUnit=months` without `period` prices ratalne offers at 12 months.
-- An offer is included only when it is active, `minAmountPln ≤ amount ≤ maxAmountPln`, and the period used is inside its own min/max.
+- The ranking has one period. Every returned offer is priced for that period, so total cost is comparable across chwilówka and pożyczka ratalna.
+- Amount only, a blank period, or `periodUnit` without `period`: **30 days** for every matching offer. There is no 12-month default.
+- `period` without `periodUnit` means **days**. `period` with `periodUnit=months` prices every matching offer for that many months.
+- An offer is included when it is active and `minAmountPln ≤ amount ≤ maxAmountPln`. If its own period unit is the ranking unit, the period must also sit inside its min/max. A ratalna offer is still priced for 30 days on the default ranking.
 - Nothing matches → **200** and `"offers": []`.
 - The database cannot be read → **503** `OFFERS_UNAVAILABLE`.
 
@@ -112,9 +112,9 @@ PLN fields are dot-decimal strings with two places (`1500.00`). Grouping and the
 }
 ```
 
-`offersUpdatedAt` above is illustrative. The API returns the catalog's real `updated_at`.
+`offersUpdatedAt` above is illustrative. The API returns the catalog's real `updated_at`. The seeded catalog for this query also returns Mira Raty after Para Plus (RRSO 11.50, cost 115.00), because that ratalna offer is priced for the same 365 days.
 
-For `?amount=1000` (period omitted), `query.period` and `query.periodUnit` are `null`. Each card still carries the period that was used.
+For `?amount=1000` (period omitted), `query.period` is `30`, `query.periodUnit` is `"days"`, and every card uses that same period. `installmentPln` is still set only on pożyczka ratalna.
 
 ### Error
 
@@ -135,8 +135,8 @@ Error responses have no `offers` array. Codes: `AMOUNT_REQUIRED`, `AMOUNT_INVALI
 
 Stored per offer: amount range (integer PLN), period range, nominal annual rate in basis points (`1850` = 18.50%), `fixed` or `variable`, commission in basis points of the amount, fixed fee in grosze, affiliate URL, active flag.
 
-- Payday total cost = interest + commission + fixed fee. One repayment at the end of the term. `RRSO = (totalRepay / amount) ^ (365 / days) − 1`.
-- Installment rata is the equal monthly annuity on the principal. The one-time fee is paid with the first rata; `installmentPln` is the regular rata and does not include that fee. Total cost = interest + fee. Total repay = principal + total cost. RRSO is the rate that equates the amount received to the present value of those payments, with month `k` at time `k/12`.
+- A day term (including the 30-day default) uses the same interest for both products: amount × nominal annual rate × days / 365, half-up to the grosz, plus commission and the fixed fee, repaid at the end of the term. `RRSO = (totalRepay / amount) ^ (365 / days) − 1`. Pożyczka ratalna also shows an equal rata over `max(1, round(days / 30))` payments; for 30 days that rata is the full amount to repay. Chwilówka leaves `installmentPln` null.
+- An explicit month term prices pożyczka ratalna as an equal monthly annuity. The one-time fee is paid with the first rata; `installmentPln` is the regular rata and does not include that fee. Chwilówka uses the same month count as simple interest (`months / 12`) and still has no rata.
 - If rounding the rata would repay less than the principal, the rata increases by one grosz.
 - A variable rate is priced from the stored rate. The label is what distinguishes it.
 - This is a comparison model, not a statutory RRSO certificate.
@@ -147,9 +147,10 @@ Stored per offer: amount range (integer PLN), period range, nominal annual rate 
 
 | Request | Result |
 | --- | --- |
-| `?amount=1000` | Mixed default list. Cichy Zakład is inactive and stays out. |
-| `?amount=1000&period=365` | Para then Para Plus: same 10.00 RRSO, lower cost first. Para Plus is the one with an affiliate URL. |
-| `?amount=25000&periodUnit=months` | Vega Raty and Góra Finansów. |
+| `?amount=1000` | Every match priced for 30 days, including Mira Raty. Cichy Zakład is inactive and stays out. |
+| `?amount=1000&period=365` | Para (cost 100.00, no affiliate URL), then Para Plus (cost 100.01, with an affiliate URL) at the same 10.00 RRSO, then Mira Raty. |
+| `?amount=25000` | Vega Raty and Góra Finansów, both for 30 days. |
+| `?amount=1200&period=12&periodUnit=months` | Every match priced for 12 months. |
 | `?amount=50` or `?amount=70000` | 200 and an empty list. |
 | `?amount=` | 400. |
 

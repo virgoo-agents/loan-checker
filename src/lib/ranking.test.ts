@@ -240,9 +240,9 @@ describe("optional period default", () => {
   });
   const tooShort = offer({ id: "short", minPeriod: 1, maxPeriod: 15 });
 
-  it("prices payday offers at 30 days and installment offers at 12 months", () => {
+  it("prices every matching offer for 30 days when period is omitted", () => {
     const amountOnly = expectOk(buildRanking(new URLSearchParams({ amount: "1200" }), [payday, installment, tooShort]));
-    expect(amountOnly.query).toMatchObject({ amountPln: "1200.00", period: null, periodUnit: null });
+    expect(amountOnly.query).toMatchObject({ amountPln: "1200.00", period: 30, periodUnit: "days" });
     const byId = Object.fromEntries(amountOnly.offers.map((row) => [row.id, row]));
     expect(Object.keys(byId).sort()).toEqual(["inst", "pay"]);
     expect(byId.pay).toMatchObject({
@@ -254,37 +254,40 @@ describe("optional period default", () => {
       installmentPln: null,
     });
     expect(byId.inst).toMatchObject({
-      period: 12,
-      periodUnit: "months",
-      periodLabel: "12 miesięcy",
-      installmentPln: "100.00",
+      period: 30,
+      periodUnit: "days",
+      periodLabel: "30 dni",
+      installmentPln: "1200.00",
       totalCostPln: "0.00",
       totalRepayPln: "1200.00",
       rrsoPercent: "0.00",
+      productType: "installment",
     });
 
     const explicitDays = expectOk(
       buildRanking(new URLSearchParams({ amount: "1200", period: "30" }), [payday, installment]),
     );
     expect(explicitDays.query).toMatchObject({ period: 30, periodUnit: "days" });
-    expect(ids(explicitDays)).toEqual(["pay"]);
-    expect(explicitDays.offers[0].totalCostPln).toBe(byId.pay.totalCostPln);
-    expect(explicitDays.offers[0].rrsoPercent).toBe(byId.pay.rrsoPercent);
+    expect(explicitDays.offers.map((row) => [row.id, row.period, row.periodUnit, row.totalCostPln])).toEqual([
+      ["inst", 30, "days", byId.inst.totalCostPln],
+      ["pay", 30, "days", byId.pay.totalCostPln],
+    ]);
   });
 
-  it("treats a blank period as omitted and a months unit as installment defaults", () => {
+  it("treats a blank period as 30 days for both product types", () => {
     const blank = expectOk(
       buildRanking(new URLSearchParams({ amount: "1200", period: "  " }), [payday, installment]),
     );
-    expect(blank.query.period).toBeNull();
+    expect(blank.query).toMatchObject({ period: 30, periodUnit: "days" });
+    expect(blank.offers.every((row) => row.period === 30 && row.periodUnit === "days")).toBe(true);
     expect(ids(blank).sort()).toEqual(["inst", "pay"]);
 
-    const months = expectOk(
+    const unitWithoutPeriod = expectOk(
       buildRanking(new URLSearchParams({ amount: "1200", periodUnit: "months" }), [payday, installment]),
     );
-    expect(months.query).toMatchObject({ period: null, periodUnit: "months" });
-    expect(ids(months)).toEqual(["inst"]);
-    expect(months.offers[0].period).toBe(12);
+    expect(unitWithoutPeriod.query).toMatchObject({ period: 30, periodUnit: "days" });
+    expect(ids(unitWithoutPeriod).sort()).toEqual(["inst", "pay"]);
+    expect(unitWithoutPeriod.offers.every((row) => row.period === 30 && row.periodUnit === "days")).toBe(true);
   });
 });
 
