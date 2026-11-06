@@ -49,24 +49,29 @@ function rateType(value: string): RateType {
 describe("seeded catalog", () => {
   const rows = catalog();
 
-  it("ranks Para ahead of the affiliated Para Plus when RRSO ties", () => {
-    const result = buildRanking(new URLSearchParams({ amount: "1000", period: "365" }), rows);
+  it("at 60 days keeps payday offers that allow 60 days and drops every seeded installment loan", () => {
+    const result = buildRanking(new URLSearchParams({ amount: "1000", period: "60" }), rows);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.offers.map((offer) => [offer.id, offer.rrsoPercent, offer.totalCostPln, offer.affiliateUrl])).toEqual([
-      ["para", "10.00", "100.00", null],
-      ["para-plus", "10.00", "100.01", "https://example.com/partner/para-plus"],
-      ["mira", "11.50", "115.00", "https://example.com/partner/mira"],
-    ]);
+    expect(result.offers.map((offer) => offer.id)).toEqual(["nurt", "para", "kropka", "para-plus"]);
+    expect(result.offers.map((offer) => offer.productType).every((type) => type === "payday")).toBe(true);
+    expect(result.offers.every((offer) => offer.period === 60)).toBe(true);
+    const para = result.offers.find((offer) => offer.id === "para");
+    const paraPlus = result.offers.find((offer) => offer.id === "para-plus");
+    expect(para?.affiliateUrl).toBeNull();
+    expect(paraPlus?.affiliateUrl).toBe("https://example.com/partner/para-plus");
+    expect(result.offers.findIndex((offer) => offer.id === "para")).toBeLessThan(
+      result.offers.findIndex((offer) => offer.id === "para-plus"),
+    );
   });
 
-  it("drops the inactive zero-cost offer from an amount-only ranking", () => {
+  it("drops inactive offers and installment loans whose month range excludes 1 month", () => {
     const result = buildRanking(new URLSearchParams({ amount: "1000" }), rows);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+    expect(result.offers.map((offer) => offer.id)).toEqual(["nurt", "para", "blysk", "kropka", "para-plus", "fala"]);
     expect(result.offers.map((offer) => offer.id)).not.toContain("cichy");
-    const mira = result.offers.find((offer) => offer.id === "mira");
-    expect(mira).toMatchObject({ period: 30, periodUnit: "days", productType: "installment" });
+    expect(result.offers.map((offer) => offer.id)).not.toContain("mira");
     expect(result.offers.every((offer) => offer.period === 30 && offer.periodUnit === "days")).toBe(true);
   });
 
@@ -79,11 +84,10 @@ describe("seeded catalog", () => {
     }
   });
 
-  it("prices large installment offers for 30 days when period is omitted", () => {
+  it("returns no offers for a large amount whose only matches are installment loans outside 1 month", () => {
     const result = buildRanking(new URLSearchParams({ amount: "25000" }), rows);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.offers.map((offer) => offer.id).sort()).toEqual(["gora", "vega"]);
-    expect(result.offers.every((offer) => offer.period === 30 && offer.periodUnit === "days" && offer.installmentPln !== null)).toBe(true);
+    expect(result.offers).toEqual([]);
   });
 });

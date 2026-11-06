@@ -1,9 +1,10 @@
 /**
  * Comparison pricing, not a statutory RRSO certificate. HTTP contract: README.
- * One period for the whole ranking. Omitted period is 30 days for every offer.
- * A day term prices both products with interest = amount × nominal annual × days / 365.
- * Pożyczka ratalna still shows an equal rata; chwilówka does not.
- * An explicit month term uses the annuity for ratalne and the same month count for chwilówki.
+ * The form allows 30 or 60 days. Omitted period is 30 days for every offer.
+ * Interest = amount × nominal annual × days / 365, half-up to the grosz.
+ * Pożyczka ratalna shows an equal rata; chwilówka does not.
+ * An offer is priced only when that term sits in its own period range
+ * (days as stored, or 30 days → 1 month and 60 days → 2 months).
  * Sort key: RRSO rounded half-up to 0.01, then total cost, then id.
  * affiliateUrl is not a sort input.
  */
@@ -14,8 +15,9 @@ export const RANKING_CRITERION = {
 } as const;
 
 const MAX_AMOUNT_PLN = 1_000_000;
-const MAX_PERIOD = { days: 3650, months: 120 } as const;
 const DEFAULT_PERIOD_DAYS = 30;
+
+type AllowedPeriodDays = 30 | 60;
 
 export type ProductType = "payday" | "installment";
 export type PeriodUnit = "days" | "months";
@@ -61,8 +63,8 @@ export type RankedOffer = {
 
 export type RankingQuery = {
   amountPln: string;
-  period: number;
-  periodUnit: PeriodUnit;
+  period: AllowedPeriodDays;
+  periodUnit: "days";
 };
 
 export type RankingSuccess = {
@@ -93,8 +95,8 @@ export type RankingResult = RankingSuccess | RankingFailure;
 
 type NormalizedQuery = {
   amountPln: number;
-  period: number;
-  periodUnit: PeriodUnit;
+  period: AllowedPeriodDays;
+  periodUnit: "days";
 };
 
 type Priced = {
@@ -132,7 +134,7 @@ export function buildRanking(params: URLSearchParams, offers: OfferInput[]): Ran
     }
     const period = periodForOffer(offer, parsed.query);
     if (period === null) continue;
-    const row = priceOffer(offer, parsed.query.amountPln, period, parsed.query.periodUnit);
+    const row = priceOffer(offer, parsed.query.amountPln, period);
     if (row) priced.push(row);
   }
   priced.sort(comparePriced);
@@ -165,100 +167,66 @@ function parseQuery(params: URLSearchParams): { ok: true; query: NormalizedQuery
   }
 
   const unitRaw = readParam(params, "periodUnit");
-  let periodUnit: PeriodUnit | null = null;
-  if (unitRaw !== null) {
-    if (!isPeriodUnit(unitRaw)) {
-      return failure(
-        "PERIOD_UNIT_INVALID",
-        "periodUnit",
-        "Jednostka okresu musi mieć wartość days albo months.",
-      );
-    }
-    periodUnit = unitRaw;
+  if (unitRaw !== null && unitRaw !== "days") {
+    return failure("PERIOD_UNIT_INVALID", "periodUnit", "Jednostka okresu musi mieć wartość days.");
   }
 
   const periodRaw = readParam(params, "period");
-  let period: number | null = null;
-  if (periodRaw !== null) {
-    const unitForLimit = periodUnit ?? "days";
-    const parsedPeriod = parseStrictPositiveInt(periodRaw);
-    if (parsedPeriod === null || parsedPeriod > maxPeriod(unitForLimit)) {
-      return failure(
-        "PERIOD_INVALID",
-        "period",
-        "Okres musi być dodatnią liczbą całkowitą (do 3650 dni albo 120 miesięcy).",
-      );
-    }
-    period = parsedPeriod;
-    if (periodUnit === null) periodUnit = "days";
-  } else {
-    period = DEFAULT_PERIOD_DAYS;
-    periodUnit = "days";
+  const period = periodRaw === null ? DEFAULT_PERIOD_DAYS : parseAllowedPeriod(periodRaw);
+  if (period === null) {
+    return failure("PERIOD_INVALID", "period", "Okres musi wynosić 30 albo 60 dni.");
   }
 
-  return { ok: true, query: { amountPln: amount, period, periodUnit } };
+  return { ok: true, query: { amountPln: amount, period, periodUnit: "days" } };
 }
 
-function periodForOffer(offer: OfferInput, query: NormalizedQuery): number | null {
-  if (unitOf(offer.productType) === query.periodUnit) {
-    if (query.period < offer.minPeriod || query.period > offer.maxPeriod) return null;
-  }
+function parseAllowedPeriod(raw: string): AllowedPeriodDays | null {
+  const parsed = parseStrictPositiveInt(raw);
+  if (parsed === 30 || parsed === 60) return parsed;
+  return null;
+}
+
+function periodForOffer(offer: OfferInput, query: NormalizedQuery): AllowedPeriodDays | null {
+  const supported = supportedTerm(offer.productType, query.period);
+  if (supported < offer.minPeriod || supported > offer.maxPeriod) return null;
   return query.period;
 }
 
-function priceOffer(
-  offer: OfferInput,
-  amountPln: number,
-  period: number,
-  unit: PeriodUnit,
-): Priced | null {
-  if (period < 1) return null;
+function supportedTerm(productType: ProductType, periodDays: AllowedPeriodDays): number {
+  switch (productType) {
+    case "payday":
+      return periodDays;
+    case "installment":
+      return monthsForDays(periodDays);
+    default: {
+      const exhaustive: never = productType;
+      return exhaustive;
+    }
+  }
+}
+
+function monthsForDays(periodDays: AllowedPeriodDays): 1 | 2 {
+  switch (periodDays) {
+    case 30:
+      return 1;
+    case 60:
+      return 2;
+    default: {
+      const exhaustive: never = periodDays;
+      return exhaustive;
+    }
+  }
+}
+
+function priceOffer(offer: OfferInput, amountPln: number, period: AllowedPeriodDays): Priced | null {
   const amountGrosze = BigInt(amountPln) * 100n;
   switch (offer.productType) {
     case "payday":
-      return pricePaydayFor(offer, amountPln, amountGrosze, period, unit);
+      return pricePayday(offer, amountPln, amountGrosze, period);
     case "installment":
-      return priceInstallmentFor(offer, amountPln, amountGrosze, period, unit);
+      return priceInstallmentDays(offer, amountPln, amountGrosze, period);
     default: {
       const exhaustive: never = offer.productType;
-      return exhaustive;
-    }
-  }
-}
-
-function pricePaydayFor(
-  offer: OfferInput,
-  amountPln: number,
-  amountGrosze: bigint,
-  period: number,
-  unit: PeriodUnit,
-): Priced | null {
-  switch (unit) {
-    case "days":
-      return pricePayday(offer, amountPln, amountGrosze, period);
-    case "months":
-      return pricePaydayMonths(offer, amountPln, amountGrosze, period);
-    default: {
-      const exhaustive: never = unit;
-      return exhaustive;
-    }
-  }
-}
-
-function priceInstallmentFor(
-  offer: OfferInput,
-  amountPln: number,
-  amountGrosze: bigint,
-  period: number,
-  unit: PeriodUnit,
-): Priced | null {
-  switch (unit) {
-    case "days":
-      return priceInstallmentDays(offer, amountPln, amountGrosze, period);
-    case "months":
-      return priceInstallment(offer, amountPln, amountGrosze, period);
-    default: {
-      const exhaustive: never = unit;
       return exhaustive;
     }
   }
@@ -275,24 +243,6 @@ function pricePayday(offer: OfferInput, amountPln: number, amountGrosze: bigint,
   const ratio = Number(totalRepay) / Number(amountGrosze);
   const rrso = totalCost === 0n ? 0 : ratio ** (365 / days) - 1;
   return toPriced(offer, amountPln, days, "days", totalCost, totalRepay, null, rrso);
-}
-
-function pricePaydayMonths(
-  offer: OfferInput,
-  amountPln: number,
-  amountGrosze: bigint,
-  months: number,
-): Priced | null {
-  const interest = divRound(
-    amountGrosze * BigInt(offer.interestRateBps) * BigInt(months),
-    10_000n * 12n,
-  );
-  const fee = feeGrosze(offer, amountGrosze);
-  const totalCost = interest + fee;
-  const totalRepay = amountGrosze + totalCost;
-  const ratio = Number(totalRepay) / Number(amountGrosze);
-  const rrso = totalCost === 0n ? 0 : ratio ** (12 / months) - 1;
-  return toPriced(offer, amountPln, months, "months", totalCost, totalRepay, null, rrso);
 }
 
 function priceInstallmentDays(
@@ -314,61 +264,6 @@ function priceInstallmentDays(
   const ratio = Number(totalRepay) / Number(amountGrosze);
   const rrso = totalCost === 0n ? 0 : ratio ** (365 / days) - 1;
   return toPriced(offer, amountPln, days, "days", totalCost, totalRepay, rata, rrso);
-}
-
-function priceInstallment(
-  offer: OfferInput,
-  amountPln: number,
-  amountGrosze: bigint,
-  months: number,
-): Priced | null {
-  let rata = annuityGrosze(amountGrosze, offer.interestRateBps, months);
-  if (rata * BigInt(months) < amountGrosze) rata += 1n;
-  const fee = feeGrosze(offer, amountGrosze);
-  const interest = rata * BigInt(months) - amountGrosze;
-  const totalCost = interest + fee;
-  const totalRepay = amountGrosze + totalCost;
-  const rrso =
-    totalCost === 0n ? 0 : solveRrso(Number(amountGrosze), installmentPayments(rata, fee, months));
-  return toPriced(offer, amountPln, months, "months", totalCost, totalRepay, rata, rrso);
-}
-
-function installmentPayments(rata: bigint, fee: bigint, months: number): { t: number; grosze: number }[] {
-  const payments: { t: number; grosze: number }[] = [];
-  for (let month = 1; month <= months; month += 1) {
-    payments.push({
-      t: month / 12,
-      grosze: Number(rata) + (month === 1 ? Number(fee) : 0),
-    });
-  }
-  return payments;
-}
-
-function annuityGrosze(principal: bigint, annualBps: number, months: number): bigint {
-  if (annualBps === 0) return divRound(principal, BigInt(months));
-  const monthly = annualBps / 10_000 / 12;
-  const growth = (1 + monthly) ** months;
-  return BigInt(Math.round((Number(principal) * monthly * growth) / (growth - 1)));
-}
-
-// ponytail: IEEE Newton IRR, stable to 0.01 pp on these loan sizes; use a decimal solver if a statutory certificate needs bit-exact rounding.
-function solveRrso(principalGrosze: number, payments: { t: number; grosze: number }[]): number {
-  let rate = 0.1;
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    let value = -principalGrosze;
-    let slope = 0;
-    for (const payment of payments) {
-      const discount = (1 + rate) ** payment.t;
-      value += payment.grosze / discount;
-      slope += (-payment.t * payment.grosze) / (1 + rate) ** (payment.t + 1);
-    }
-    if (!Number.isFinite(value) || !Number.isFinite(slope) || slope === 0) break;
-    const next = rate - value / slope;
-    if (!Number.isFinite(next) || next <= -0.999999) break;
-    if (Math.abs(next - rate) < 1e-12) return next;
-    rate = next;
-  }
-  return rate;
 }
 
 function feeGrosze(offer: OfferInput, amountGrosze: bigint): bigint {
@@ -457,36 +352,6 @@ function parseStrictPositiveInt(raw: string): number | null {
   if (!/^[1-9]\d*$/.test(raw)) return null;
   const value = Number(raw);
   return Number.isSafeInteger(value) ? value : null;
-}
-
-function isPeriodUnit(value: string): value is PeriodUnit {
-  return value === "days" || value === "months";
-}
-
-function unitOf(productType: ProductType): PeriodUnit {
-  switch (productType) {
-    case "payday":
-      return "days";
-    case "installment":
-      return "months";
-    default: {
-      const exhaustive: never = productType;
-      return exhaustive;
-    }
-  }
-}
-
-function maxPeriod(unit: PeriodUnit): number {
-  switch (unit) {
-    case "days":
-      return MAX_PERIOD.days;
-    case "months":
-      return MAX_PERIOD.months;
-    default: {
-      const exhaustive: never = unit;
-      return exhaustive;
-    }
-  }
 }
 
 function productLabel(productType: ProductType): RankedOffer["productTypeLabel"] {

@@ -23,17 +23,18 @@ Response types are `RankingResult` in `@/lib/ranking`.
 | Param | Required | Rule |
 | --- | --- | --- |
 | `amount` | yes | Integer PLN from 1 to 1000000. Trimmed. No decimals, signs, or leading zeros. |
-| `period` | no | Positive integer. Blank is treated as omitted. |
-| `periodUnit` | no | `days` or `months`. |
+| `period` | no | `30` or `60` only. Blank is omitted. |
+| `periodUnit` | no | `days` only. Omit it to mean days. |
+
+Send `period=30` or `period=60`. Omit `period` to get 30 days. Do not send months.
 
 - Missing or blank amount → **400** `AMOUNT_REQUIRED` (`Podaj kwotę w złotych.`).
 - Any other invalid amount → **400** `AMOUNT_INVALID`. No offer list is returned.
-- Invalid period → **400** `PERIOD_INVALID`. The default period is not substituted.
-- Invalid unit → **400** `PERIOD_UNIT_INVALID`.
-- The ranking has one period. Every returned offer is priced for that period, so total cost is comparable across chwilówka and pożyczka ratalna.
-- Amount only, a blank period, or `periodUnit` without `period`: **30 days** for every matching offer. There is no 12-month default.
-- `period` without `periodUnit` means **days**. `period` with `periodUnit=months` prices every matching offer for that many months.
-- An offer is included when it is active and `minAmountPln ≤ amount ≤ maxAmountPln`. If its own period unit is the ranking unit, the period must also sit inside its min/max. A ratalna offer is still priced for 30 days on the default ranking.
+- Any period other than 30 or 60 → **400** `PERIOD_INVALID` (`Okres musi wynosić 30 albo 60 dni.`). The default is not substituted.
+- `periodUnit` other than `days`, including `months` → **400** `PERIOD_UNIT_INVALID`. `period=12&periodUnit=months` is rejected.
+- Omitted period, a blank period, or `periodUnit=days` without a number → **30 days** for the whole list.
+- One period for every card. `query.period` is `30` or `60` and `query.periodUnit` is `"days"`.
+- An offer is included only when it is active, the amount is inside its range, and it supports that term. Chwilówka ranges are days: 30 or 60 must sit between `minPeriod` and `maxPeriod`. Pożyczka ratalna ranges are months: 30 days counts as 1 month and 60 days as 2 months. Do not compare the raw number 30 with a month maximum. An offer outside that term is left out. There is no 12-month fallback.
 - Nothing matches → **200** and `"offers": []`.
 - The database cannot be read → **503** `OFFERS_UNAVAILABLE`.
 
@@ -68,7 +69,7 @@ PLN fields are dot-decimal strings with two places (`1500.00`). Grouping and the
     "label": "Najniższe RRSO; przy równym RRSO najniższy koszt całkowity"
   },
   "offersUpdatedAt": "2026-11-06T12:00:00.000Z",
-  "query": { "amountPln": "1000.00", "period": 365, "periodUnit": "days" },
+  "query": { "amountPln": "1000.00", "period": 30, "periodUnit": "days" },
   "offers": [
     {
       "id": "para",
@@ -77,15 +78,15 @@ PLN fields are dot-decimal strings with two places (`1500.00`). Grouping and the
       "productType": "payday",
       "productTypeLabel": "chwilówka",
       "requestedAmountPln": "1000.00",
-      "period": 365,
+      "period": 30,
       "periodUnit": "days",
-      "periodLabel": "365 dni",
-      "rrsoPercent": "10.00",
+      "periodLabel": "30 dni",
+      "rrsoPercent": "10.47",
       "interestRatePercent": "10.00",
       "rateType": "fixed",
       "rateTypeLabel": "stała",
-      "totalCostPln": "100.00",
-      "totalRepayPln": "1100.00",
+      "totalCostPln": "8.22",
+      "totalRepayPln": "1008.22",
       "installmentPln": null,
       "affiliateUrl": null
     },
@@ -96,10 +97,10 @@ PLN fields are dot-decimal strings with two places (`1500.00`). Grouping and the
       "productType": "payday",
       "productTypeLabel": "chwilówka",
       "requestedAmountPln": "1000.00",
-      "period": 365,
+      "period": 30,
       "periodUnit": "days",
-      "periodLabel": "365 dni",
-      "rrsoPercent": "10.00",
+      "periodLabel": "30 dni",
+      "rrsoPercent": "218.90",
       "interestRatePercent": "0.00",
       "rateType": "fixed",
       "rateTypeLabel": "stała",
@@ -112,9 +113,9 @@ PLN fields are dot-decimal strings with two places (`1500.00`). Grouping and the
 }
 ```
 
-`offersUpdatedAt` above is illustrative. The API returns the catalog's real `updated_at`. The seeded catalog for this query also returns Mira Raty after Para Plus (RRSO 11.50, cost 115.00), because that ratalna offer is priced for the same 365 days.
+`offersUpdatedAt` above is illustrative. The API returns the catalog's real `updated_at`. Those two cards are Para and Para Plus at 30 days; the full `?amount=1000` list also contains the other chwilówki whose day range includes 30. Mira Raty is not in it: its term starts at 6 months, and 30 days is 1 month.
 
-For `?amount=1000` (period omitted), `query.period` is `30`, `query.periodUnit` is `"days"`, and every card uses that same period. `installmentPln` is still set only on pożyczka ratalna.
+For an omitted period, `query.period` is `30` and `query.periodUnit` is `"days"`. Every card uses that same period. `installmentPln` is set only on pożyczka ratalna, and only when that offer's month range includes 1 (for 30 days) or 2 (for 60 days).
 
 ### Error
 
@@ -135,9 +136,8 @@ Error responses have no `offers` array. Codes: `AMOUNT_REQUIRED`, `AMOUNT_INVALI
 
 Stored per offer: amount range (integer PLN), period range, nominal annual rate in basis points (`1850` = 18.50%), `fixed` or `variable`, commission in basis points of the amount, fixed fee in grosze, affiliate URL, active flag.
 
-- A day term (including the 30-day default) uses the same interest for both products: amount × nominal annual rate × days / 365, half-up to the grosz, plus commission and the fixed fee, repaid at the end of the term. `RRSO = (totalRepay / amount) ^ (365 / days) − 1`. Pożyczka ratalna also shows an equal rata over `max(1, round(days / 30))` payments; for 30 days that rata is the full amount to repay. Chwilówka leaves `installmentPln` null.
-- An explicit month term prices pożyczka ratalna as an equal monthly annuity. The one-time fee is paid with the first rata; `installmentPln` is the regular rata and does not include that fee. Chwilówka uses the same month count as simple interest (`months / 12`) and still has no rata.
-- If rounding the rata would repay less than the principal, the rata increases by one grosz.
+- Both products use the same day-count interest: amount × nominal annual rate × days / 365, half-up to the grosz, plus commission and the fixed fee. `RRSO = (totalRepay / amount) ^ (365 / days) − 1`. The same rate and fees therefore produce the same total cost at 30 days and again at 60 days.
+- Pożyczka ratalna shows an equal rata over 1 payment at 30 days (the full amount to repay) or 2 payments at 60 days. Chwilówka leaves `installmentPln` null.
 - A variable rate is priced from the stored rate. The label is what distinguishes it.
 - This is a comparison model, not a statutory RRSO certificate.
 
@@ -147,10 +147,10 @@ Stored per offer: amount range (integer PLN), period range, nominal annual rate 
 
 | Request | Result |
 | --- | --- |
-| `?amount=1000` | Every match priced for 30 days, including Mira Raty. Cichy Zakład is inactive and stays out. |
-| `?amount=1000&period=365` | Para (cost 100.00, no affiliate URL), then Para Plus (cost 100.01, with an affiliate URL) at the same 10.00 RRSO, then Mira Raty. |
-| `?amount=25000` | Vega Raty and Góra Finansów, both for 30 days. |
-| `?amount=1200&period=12&periodUnit=months` | Every match priced for 12 months. |
+| `?amount=1000` | 30 days. Nurt, Para, Błysk, Kropka Pożyczki, Para Plus, Fala Gotówki. Cichy Zakład is inactive. Mira, Vega, and Góra stay out (shortest terms 6 or 12 months). |
+| `?amount=1000&period=60` | 60 days. Nurt, Para, Kropka Pożyczki, Para Plus. Fala and Błysk stop at 30 days. Still no seeded ratalna. |
+| `?amount=25000` | 200 and an empty list. The only offers in range are ratalne outside 1 month. |
+| `?period=12` or `?periodUnit=months` | 400. |
 | `?amount=50` or `?amount=70000` | 200 and an empty list. |
 | `?amount=` | 400. |
 

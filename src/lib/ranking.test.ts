@@ -90,29 +90,56 @@ describe("period validation", () => {
     expect(httpStatusForRanking(result)).toBe(400);
   });
 
-  it.each(["-1", "1.5", "30.0", "abc", "3651"])("rejects period %s when the unit is days", (period) => {
-    const result = buildRanking(new URLSearchParams({ amount: "1000", period }), []);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("PERIOD_INVALID");
-  });
+  it.each(["-1", "1.5", "12", "31", "90", "365", "30.0", "abc"])(
+    "rejects period %s",
+    (period) => {
+      const result = buildRanking(new URLSearchParams({ amount: "1000", period }), [offer()]);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toMatchObject({
+        code: "PERIOD_INVALID",
+        field: "period",
+        message: "Okres musi wynosić 30 albo 60 dni.",
+      });
+      expect(result).not.toHaveProperty("offers");
+    },
+  );
 
-  it("rejects a month period above 120 and an unknown unit", () => {
-    const months = buildRanking(
-      new URLSearchParams({ amount: "1000", period: "121", periodUnit: "months" }),
-      [],
+  it("rejects months and any unit other than days", () => {
+    const twelveMonths = buildRanking(
+      new URLSearchParams({ amount: "1000", period: "12", periodUnit: "months" }),
+      [offer({ id: "should-not-rank", productType: "installment", minPeriod: 6, maxPeriod: 36 })],
     );
-    expect(months.ok).toBe(false);
-    if (!months.ok) expect(months.error.code).toBe("PERIOD_INVALID");
+    expect(twelveMonths.ok).toBe(false);
+    if (!twelveMonths.ok) {
+      expect(twelveMonths.error).toMatchObject({ code: "PERIOD_UNIT_INVALID", field: "periodUnit" });
+    }
 
-    const unit = buildRanking(
+    const monthsAlone = buildRanking(new URLSearchParams({ amount: "1000", periodUnit: "months" }), [offer()]);
+    expect(monthsAlone.ok).toBe(false);
+    if (!monthsAlone.ok) expect(monthsAlone.error.code).toBe("PERIOD_UNIT_INVALID");
+
+    const weeks = buildRanking(
       new URLSearchParams({ amount: "1000", period: "30", periodUnit: "weeks" }),
       [offer()],
     );
-    expect(unit.ok).toBe(false);
-    if (!unit.ok) {
-      expect(unit.error).toMatchObject({ code: "PERIOD_UNIT_INVALID", field: "periodUnit" });
+    expect(weeks.ok).toBe(false);
+    if (!weeks.ok) {
+      expect(weeks.error).toMatchObject({
+        code: "PERIOD_UNIT_INVALID",
+        field: "periodUnit",
+        message: "Jednostka okresu musi mieć wartość days.",
+      });
     }
+  });
+
+  it("accepts 30 and 60 days with or without the unit", () => {
+    const thirty = expectOk(buildRanking(new URLSearchParams({ amount: "1000", period: "30" }), [offer()]));
+    const sixty = expectOk(
+      buildRanking(new URLSearchParams({ amount: "1000", period: "60", periodUnit: "days" }), [offer()]),
+    );
+    expect(thirty.query).toMatchObject({ period: 30, periodUnit: "days" });
+    expect(sixty.query).toMatchObject({ period: 60, periodUnit: "days" });
   });
 });
 
@@ -134,7 +161,7 @@ describe("amount range filter", () => {
 
 describe("RRSO sort", () => {
   it("orders by lowest RRSO", () => {
-    const params = new URLSearchParams({ amount: "1000", period: "365" });
+    const params = new URLSearchParams({ amount: "1000", period: "30" });
     const result = expectOk(
       buildRanking(params, [
         offer({ id: "mid", interestRateBps: 1_000, affiliateUrl: "https://ads.example/mid" }),
@@ -144,8 +171,8 @@ describe("RRSO sort", () => {
     );
     expect(result.offers.map((row) => [row.id, row.rrsoPercent])).toEqual([
       ["low", "0.00"],
-      ["mid", "10.00"],
-      ["high", "20.00"],
+      ["mid", "10.47"],
+      ["high", "21.94"],
     ]);
     expect(result.criterion).toEqual({
       id: "lowest_rrso_then_total_cost",
@@ -156,14 +183,14 @@ describe("RRSO sort", () => {
 
 describe("RRSO tie broken by total cost", () => {
   it("ranks the cheaper offer first when displayed RRSO matches", () => {
-    const params = new URLSearchParams({ amount: "1000", period: "365" });
+    const params = new URLSearchParams({ amount: "1000", period: "60" });
     const result = expectOk(
       buildRanking(params, [
         offer({
           id: "dearer",
           partnerName: "Para Plus",
           interestRateBps: 0,
-          fixedFeeGrosze: 10_001,
+          fixedFeeGrosze: 1_645,
           affiliateUrl: "https://ads.example/premium",
         }),
         offer({
@@ -176,13 +203,13 @@ describe("RRSO tie broken by total cost", () => {
       ]),
     );
     expect(result.offers.map((row) => [row.id, row.rrsoPercent, row.totalCostPln])).toEqual([
-      ["cheaper", "10.00", "100.00"],
-      ["dearer", "10.00", "100.01"],
+      ["cheaper", "10.43", "16.44"],
+      ["dearer", "10.43", "16.45"],
     ]);
   });
 
   it("breaks a full tie by id and still ignores affiliate url", () => {
-    const params = new URLSearchParams({ amount: "1000", period: "365" });
+    const params = new URLSearchParams({ amount: "1000", period: "30" });
     const withAds = expectOk(
       buildRanking(params, [
         offer({ id: "b", affiliateUrl: "https://aaa.example/first" }),
@@ -215,7 +242,7 @@ describe("affiliate field does not affect sort", () => {
         ? { ...row, affiliateUrl: "https://ads.example/top-placement" }
         : { ...row, affiliateUrl: null },
     );
-    const params = new URLSearchParams({ amount: "1000", period: "365" });
+    const params = new URLSearchParams({ amount: "1000", period: "30" });
     expect(ids(expectOk(buildRanking(params, base)))).toEqual(["organic", "paid"]);
     expect(ids(expectOk(buildRanking(params, flipped)))).toEqual(["organic", "paid"]);
     const paid = expectOk(buildRanking(params, base)).offers[1];
@@ -235,16 +262,27 @@ describe("optional period default", () => {
     productType: "installment",
     interestRateBps: 0,
     minAmountPln: 100,
-    minPeriod: 3,
-    maxPeriod: 24,
+    minPeriod: 1,
+    maxPeriod: 2,
+  });
+  const tooLong = offer({
+    id: "long",
+    productType: "installment",
+    interestRateBps: 0,
+    minAmountPln: 100,
+    minPeriod: 6,
+    maxPeriod: 36,
   });
   const tooShort = offer({ id: "short", minPeriod: 1, maxPeriod: 15 });
 
   it("prices every matching offer for 30 days when period is omitted", () => {
-    const amountOnly = expectOk(buildRanking(new URLSearchParams({ amount: "1200" }), [payday, installment, tooShort]));
+    const amountOnly = expectOk(
+      buildRanking(new URLSearchParams({ amount: "1200" }), [payday, installment, tooShort, tooLong]),
+    );
     expect(amountOnly.query).toMatchObject({ amountPln: "1200.00", period: 30, periodUnit: "days" });
     const byId = Object.fromEntries(amountOnly.offers.map((row) => [row.id, row]));
     expect(Object.keys(byId).sort()).toEqual(["inst", "pay"]);
+    expect(byId.long).toBeUndefined();
     expect(byId.pay).toMatchObject({
       period: 30,
       periodUnit: "days",
@@ -274,20 +312,54 @@ describe("optional period default", () => {
     ]);
   });
 
-  it("treats a blank period as 30 days for both product types", () => {
+  it("prices 60 days for offers that support two months or 60 days, and drops the rest", () => {
+    const onlyThirty = offer({ id: "only30", minPeriod: 15, maxPeriod: 30, interestRateBps: 1_000 });
+    const sixty = expectOk(
+      buildRanking(new URLSearchParams({ amount: "1200", period: "60" }), [
+        payday,
+        onlyThirty,
+        installment,
+        tooLong,
+      ]),
+    );
+    expect(sixty.query).toMatchObject({ period: 60, periodUnit: "days" });
+    expect(ids(sixty).sort()).toEqual(["inst", "pay"]);
+    expect(sixty.offers.every((row) => row.period === 60 && row.periodUnit === "days")).toBe(true);
+    const inst = sixty.offers.find((row) => row.id === "inst");
+    const pay = sixty.offers.find((row) => row.id === "pay");
+    expect(inst).toMatchObject({ installmentPln: "600.00", totalCostPln: "0.00", totalRepayPln: "1200.00" });
+    expect(pay?.installmentPln).toBeNull();
+    expect(pay?.totalCostPln).toBe("19.73");
+  });
+
+  it("treats a blank period as 30 days", () => {
     const blank = expectOk(
-      buildRanking(new URLSearchParams({ amount: "1200", period: "  " }), [payday, installment]),
+      buildRanking(new URLSearchParams({ amount: "1200", period: "  " }), [payday, installment, tooLong]),
     );
     expect(blank.query).toMatchObject({ period: 30, periodUnit: "days" });
     expect(blank.offers.every((row) => row.period === 30 && row.periodUnit === "days")).toBe(true);
     expect(ids(blank).sort()).toEqual(["inst", "pay"]);
+  });
 
-    const unitWithoutPeriod = expectOk(
-      buildRanking(new URLSearchParams({ amount: "1200", periodUnit: "months" }), [payday, installment]),
+  it("gives both product types the same total cost for the same rate and term", () => {
+    const result = expectOk(
+      buildRanking(new URLSearchParams({ amount: "1200", period: "60" }), [
+        offer({ id: "pay", interestRateBps: 1_000, minPeriod: 1, maxPeriod: 60 }),
+        offer({
+          id: "inst",
+          productType: "installment",
+          interestRateBps: 1_000,
+          minPeriod: 1,
+          maxPeriod: 2,
+        }),
+      ]),
     );
-    expect(unitWithoutPeriod.query).toMatchObject({ period: 30, periodUnit: "days" });
-    expect(ids(unitWithoutPeriod).sort()).toEqual(["inst", "pay"]);
-    expect(unitWithoutPeriod.offers.every((row) => row.period === 30 && row.periodUnit === "days")).toBe(true);
+    expect(result.offers.map((row) => [row.id, row.totalCostPln, row.rrsoPercent, row.period])).toEqual([
+      ["inst", "19.73", "10.43", 60],
+      ["pay", "19.73", "10.43", 60],
+    ]);
+    expect(result.offers[0]?.installmentPln).toBe("609.87");
+    expect(result.offers[1]?.installmentPln).toBeNull();
   });
 });
 
@@ -327,23 +399,23 @@ describe("installment rata", () => {
     expect(payday.offers[0].productTypeLabel).toBe("chwilówka");
 
     const installment = expectOk(
-      buildRanking(new URLSearchParams({ amount: "1200", period: "12", periodUnit: "months" }), [
+      buildRanking(new URLSearchParams({ amount: "1200", period: "30" }), [
         offer({
           id: "inst",
           productType: "installment",
           interestRateBps: 1_200,
           rateType: "variable",
           minPeriod: 1,
-          maxPeriod: 36,
+          maxPeriod: 2,
         }),
       ]),
     );
     expect(installment.offers[0]).toMatchObject({
       productType: "installment",
       productTypeLabel: "pożyczka ratalna",
-      installmentPln: "106.62",
-      totalCostPln: "79.44",
-      totalRepayPln: "1279.44",
+      installmentPln: "1211.84",
+      totalCostPln: "11.84",
+      totalRepayPln: "1211.84",
       rrsoPercent: "12.69",
       interestRatePercent: "12.00",
       rateType: "variable",
@@ -353,22 +425,22 @@ describe("installment rata", () => {
 
   it("counts an upfront-with-first-rata fee in total cost and RRSO", () => {
     const result = expectOk(
-      buildRanking(new URLSearchParams({ amount: "1200", period: "12", periodUnit: "months" }), [
+      buildRanking(new URLSearchParams({ amount: "1200", period: "30" }), [
         offer({
           id: "fee",
           productType: "installment",
           interestRateBps: 0,
           fixedFeeGrosze: 12_000,
           minPeriod: 1,
-          maxPeriod: 36,
+          maxPeriod: 2,
         }),
       ]),
     );
     expect(result.offers[0]).toMatchObject({
-      installmentPln: "100.00",
+      installmentPln: "1320.00",
       totalCostPln: "120.00",
       totalRepayPln: "1320.00",
-      rrsoPercent: "21.42",
+      rrsoPercent: "218.87",
     });
   });
 });
@@ -376,7 +448,7 @@ describe("installment rata", () => {
 describe("pricing", () => {
   it("sums interest and fees into total cost for a payday offer", () => {
     const result = expectOk(
-      buildRanking(new URLSearchParams({ amount: "1000", period: "365" }), [
+      buildRanking(new URLSearchParams({ amount: "1000", period: "30" }), [
         offer({
           id: "mix",
           partnerName: "Fala",
@@ -393,15 +465,15 @@ describe("pricing", () => {
       partnerName: "Fala",
       logoUrl: "https://example.com/logos/fala.svg",
       requestedAmountPln: "1000.00",
-      period: 365,
+      period: 30,
       periodUnit: "days",
-      periodLabel: "365 dni",
+      periodLabel: "30 dni",
       interestRatePercent: "10.00",
       rateType: "fixed",
       rateTypeLabel: "stała",
-      totalCostPln: "151.50",
-      totalRepayPln: "1151.50",
-      rrsoPercent: "15.15",
+      totalCostPln: "59.72",
+      totalRepayPln: "1059.72",
+      rrsoPercent: "102.53",
       installmentPln: null,
       affiliateUrl: "https://example.com/partner/fala",
     });
