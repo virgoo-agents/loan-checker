@@ -5,12 +5,7 @@ import { Faq } from "@/components/faq";
 import { HowItWorks } from "@/components/how-it-works";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { loadRanking } from "@/lib/offers";
-import {
-  buildRankingQuery,
-  DEFAULT_AMOUNT,
-  DEFAULT_PERIOD_DAYS,
-} from "@/lib/ranking-request";
+import { DEFAULT_AMOUNT, DEFAULT_PERIOD_DAYS } from "@/lib/ranking-request";
 import type { RankingResult } from "@/lib/ranking";
 
 export default function HomePage() {
@@ -31,7 +26,7 @@ export default function HomePage() {
 
 async function InitialRanking() {
   await connection();
-  const initialResult = await loadInitialRanking();
+  const initialResult = loadInitialRanking();
   return (
     <Comparison
       initialResult={initialResult}
@@ -52,18 +47,13 @@ function RankingFallback() {
   );
 }
 
-async function loadInitialRanking(): Promise<RankingResult> {
-  try {
-    return await loadRanking(buildRankingQuery(DEFAULT_AMOUNT, DEFAULT_PERIOD_DAYS));
-  } catch (error) {
-    console.error(error);
-    return {
-      ok: false,
-      error: {
-        code: "OFFERS_UNAVAILABLE",
-        field: "offers",
-        message: "Nie udało się wczytać ofert. Spróbuj ponownie.",
-      },
-    };
-  }
+function loadInitialRanking(): RankingResult {
+  return {
+    ok: false,
+    error: {
+      code: "OFFERS_UNAVAILABLE",
+      field: "offers",
+      message: "Nie udało się wczytać ofert. Spróbuj ponownie.",
+    },
+  };
 }

@@ -9,7 +9,7 @@ export type PeriodDays = (typeof PERIOD_DAY_OPTIONS)[number];
 export const DEFAULT_PERIOD_DAYS: PeriodDays = 30;
 
 /**
- * Query for `loadRanking` and `GET /api/ranking`.
+ * Query for `GET /api/ranking`.
  * Always sends the form's single period in days so every card is priced for
  * that same period. Does not omit `period`.
  */
