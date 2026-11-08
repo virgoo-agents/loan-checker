@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: Geist;
+  src: url("./assets/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-cream: #f4f1ea;
+  --color-ink: #14241c;
+  --color-pine: #1a6b4e;
+  --color-pine-dark: #14563e;
+  --color-mint: #e4f3ec;
+  --color-danger: #c55148;
+  --color-danger-soft: #fdecec;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans), sans-serif;
+}
