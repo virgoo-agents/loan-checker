@@ -7,8 +7,7 @@ namespace App\Entity;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Row in the Prisma `offers` table. Column names and PostgreSQL enums match
- * prisma/schema.prisma. This mapping only reads and seeds that catalog.
+ * Row in the offers table. This mapping only reads and seeds that catalog.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'offers')]
