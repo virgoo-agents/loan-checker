@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\Doctrine\DatabaseUrl;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Component\HttpKernel\Kernel as BaseKernel;
 
@@ -12,6 +13,7 @@ class Kernel extends BaseKernel
     public function __construct(string $environment, bool $debug)
     {
         date_default_timezone_set('UTC');
+        DatabaseUrl::apply();
         parent::__construct($environment, $debug);
     }
 
