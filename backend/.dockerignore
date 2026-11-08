@@ -1,0 +1,10 @@
+.git
+.env.local
+.env.*.local
+node_modules
+tests
+var
+vendor
+.phpunit.cache
+Dockerfile
+.dockerignore

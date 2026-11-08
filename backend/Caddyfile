@@ -1,0 +1,12 @@
+:{$PORT:80} {
+	root * /app/public
+	encode zstd gzip
+	file_server
+
+	php_server {
+		try_files {path} index.php
+	}
+
+	@phpFile path *.php*
+	error @phpFile "Not found" 404
+}

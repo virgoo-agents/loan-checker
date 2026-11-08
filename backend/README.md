@@ -97,6 +97,10 @@ composer lint
 
 `composer test` is PHPUnit. It does not need Postgres: ranking cases call the ranker directly, and HTTP cases replace the offer reader. `composer lint` checks the container, YAML, and PHP syntax.
 
-## Later hosting
+## Vercel
 
-Do not add a root `vercel.json`. That file would take over the current Next.js deployment. A later API host can be Docker/FrankenPHP in this `backend/` directory, separate from the Vercel site.
+FrankenPHP (`Dockerfile`, `Caddyfile`) listens on Vercel's `PORT` (default 80) and serves only this Symfony app. Do not copy `frontend/dist` into the image.
+
+The root `vercel.json` belongs to the frontend cutover. Its `backend` service builds this Dockerfile, and the `/api/(.*)` rewrite (before the catch-all) sends the original path here, so the route stays `/api/ranking`. SPA fallback, including `/polityka-prywatnosci`, stays on the `frontend` service. Do not point the top-level catch-all at `/index.html`.
+
+Before a production cutover, set the Vercel project framework preset to Other so the root Next.js app is not the deployment. `DATABASE_URL` stays the shared Supabase session-pooler URL. At boot, `App\Doctrine\DatabaseUrl` adds `serverVersion=16` and `charset=utf8`, keeps `sslmode` when it is already set, and drops Prisma-only parameters (`schema`, `pgbouncer`, `connection_limit`) if they appear. It does not print the URL.
