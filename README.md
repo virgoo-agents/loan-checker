@@ -168,3 +168,7 @@ npm run dev
 ```
 
 Postgres 16 is the Compose service `postgres` on `localhost:5432` (`loan_checker` / `loan_checker`, database `loan_checker`). `npm test` runs the ranking cases and does not need a database.
+
+## Symfony API
+
+The same ranking contract is implemented as a Symfony API in [`backend/`](backend/README.md). This Next.js app stays in place until cutover. There is no `frontend/` directory and no root `vercel.json`.
