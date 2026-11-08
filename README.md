@@ -171,4 +171,4 @@ Postgres 16 is the Compose service `postgres` on `localhost:5432` (`loan_checker
 
 ## Symfony API
 
-The same ranking contract is implemented as a Symfony API in [`backend/`](backend/README.md). This Next.js app stays in place until cutover. There is no `frontend/` directory and no root `vercel.json`.
+The same ranking contract is implemented as a Symfony API in [`backend/`](backend/README.md). Production hosting is two Vercel services in the root `vercel.json` (Services is in beta). The `frontend` service is the static Vite SPA in `frontend/`. The `backend` service is reserved for the FrankenPHP container from `backend/Dockerfile`, which this frontend change does not add. Public `/api` is rewritten to the `backend` service. Every other path, including `/polityka-prywatnosci`, is rewritten to the `frontend` service, which falls back to `index.html`. The Next.js app at the repository root is not the production entrypoint. Turn off the Next.js framework preset in the Vercel project settings before the cutover deploy.
