@@ -2,7 +2,7 @@
 
 Public comparison of fictional Polish payday loans (chwilówki) and installment loans (pożyczki ratalne), in PLN. No accounts, no applications, no admin UI.
 
-The page is the comparison UI. The first response is server-rendered from `loadRanking()`. Changing the amount or the period updates the ranking through `GET /api/ranking` without a full reload. The form label is „Okres spłaty”. It is a required choice of 30 or 60 days and defaults to 30. Every request sends that one `period` with `periodUnit=days` for the whole ranking. Cards stay in the order returned. „Przejdź do oferty” opens `affiliateUrl` in a new tab.
+The live comparison UI is the Vue SPA in [`frontend/`](frontend/README.md). It calls `GET /api/ranking`. The Next.js pages, components, and styles that used to render this comparison have been removed. The repository root still contains the original Next.js route `src/app/api/ranking/route.ts` and the Prisma catalog that route reads. Leave those for the separate backend cleanup.
 
 Affiliate links are stored for „Przejdź do oferty” and do not change rank.
 
@@ -10,15 +10,7 @@ Affiliate links are stored for „Przejdź do oferty” and do not change rank.
 
 `GET /api/ranking`
 
-A Server Component can skip HTTP:
-
-```ts
-import { loadRanking } from "@/lib/offers";
-
-const ranking = await loadRanking(new URLSearchParams({ amount: "1000" }));
-```
-
-Response types are `RankingResult` in `@/lib/ranking`.
+Production serves this route from the Symfony API. The same contract is still implemented at the repository root by `src/app/api/ranking/route.ts` (`loadRanking` in `@/lib/offers`). Response types are `RankingResult` in `@/lib/ranking`.
 
 ### Query
 
@@ -157,6 +149,10 @@ Stored per offer: amount range (integer PLN), period range, nominal annual rate 
 | `?amount=` | 400. |
 
 ## Local setup
+
+Comparison UI: [`frontend/README.md`](frontend/README.md).
+
+The root Next.js app is only the leftover ranking route and Prisma catalog:
 
 ```bash
 cp .env.example .env
