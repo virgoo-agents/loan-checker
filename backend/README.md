@@ -28,7 +28,7 @@ If that database already has the Prisma `offers` table and seed, skip the migrat
 DATABASE_URL="postgresql://loan_checker:loan_checker@127.0.0.1:5432/loan_checker?serverVersion=16&charset=utf8"
 ```
 
-Point `DATABASE_URL` at the same database the Next.js app uses. Keep Prisma's `?schema=public` on the root `.env` only. Doctrine does not use that parameter; `serverVersion=16` stops it from opening a connection just to detect the server.
+Point `DATABASE_URL` at the same database the Next.js app uses. Doctrine does not use a `schema` query parameter; `serverVersion=16` stops it from opening a connection just to detect the server.
 
 `APP_ENV` is `dev` by default. Tests force `test`. Do not put production secrets in `backend/.env`. Overrides belong in `backend/.env.local` (git-ignored).
 
@@ -77,7 +77,7 @@ Both products use the same day-count interest: amount × nominal annual rate × 
 
 The reader maps the existing Prisma table `offers` (`partner_name`, `product_type` `"ProductType"`, `rate_type` `"RateType"`, amount and period integers, basis points, grosze, `affiliate_url`, `active`, `created_at`, `updated_at`). No column rename.
 
-`src/Catalog/Catalog.php` is the same eleven lenders as `prisma/offers.mjs`. `php bin/console app:catalog:seed` deletes every row and inserts those lenders. Run it only when you mean to replace the catalog. A database that was already seeded by Prisma does not need it.
+`src/Catalog/Catalog.php` is the catalog of eleven fictional lenders. `php bin/console app:catalog:seed` deletes every row and inserts those lenders. Run it only when you mean to replace the catalog. A database that was already seeded by Prisma does not need it.
 
 ## CORS
 

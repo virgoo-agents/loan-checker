@@ -9,7 +9,7 @@ use App\Ranking\ProductType;
 use App\Ranking\RateType;
 
 /**
- * Same fictional lenders as prisma/offers.mjs. Ids, ranges, rates, fees, and links match.
+ * Fictional lenders for the ranking catalog. Ids, ranges, rates, fees, and links are defined here.
  */
 final class Catalog
 {
